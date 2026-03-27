@@ -98,6 +98,22 @@ async def fetch_results(query: str, folder_title: str, limit: int, days: Optiona
                     if not text:
                         continue
                     title, salary, location, stack = extract_info(text)
+                    # Дополнить из превью ссылки если есть
+                    wp = getattr(getattr(msg, "media", None), "webpage", None)
+                    if wp:
+                        wp_title = getattr(wp, "title", None) or ""
+                        wp_desc = getattr(wp, "description", None) or ""
+                        wp_full = f"{wp_title} {wp_desc}"
+                        if not salary and re.search(r"\$\s*\d|€\s*\d|\d+k|\d+\s*usd", wp_full, re.I):
+                            m = re.search(r"[\$€][\d,\s\-–]+(?:k|usd)?|\d+[\s\-–]+\d+\s*(?:usd|\$|€)", wp_full, re.I)
+                            if m:
+                                salary = m.group(0).strip()
+                        if not location and re.search(r"remote|удален|офис|onsite", wp_full, re.I):
+                            m = re.search(r"(remote|удален\w*|офис|onsite)", wp_full, re.I)
+                            if m:
+                                location = m.group(0)
+                        if wp_title and title == re.sub(r"[\*_`#]+", "", (text.split("\n")[0] if text else "")).strip():
+                            title = wp_title
                     vacancies.append(Vacancy(
                         channel=getattr(entity, "title", "?"),
                         date=msg.date.strftime("%d.%m.%Y"),
