@@ -11,6 +11,7 @@ from telethon import TelegramClient
 from telethon.tl.functions.messages import GetDialogFiltersRequest
 from telethon.tl.types import DialogFilter
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, ListView, ListItem, Static
 from textual.binding import Binding
@@ -136,8 +137,8 @@ class DetailScreen(Screen):
             + (f"[green]Зарплата:[/green] {v.salary}\n" if v.salary else "")
             + (f"[yellow]Локация:[/yellow]  {v.location}\n" if v.location else "")
             + (f"[cyan]Стек:[/cyan]     {v.stack}\n" if v.stack else "")
-            + (f"\n[link={v.link}]{v.link}[/link]\n" if v.link else "")
-            + f"\n{'─' * 60}\n\n{v.full_text}"
+            + (f"\n{v.link}\n" if v.link else "")
+            + f"\n{'─' * 60}\n\n{escape(v.full_text)}"
         )
         yield Static(text, classes="detail")
         yield Static(
