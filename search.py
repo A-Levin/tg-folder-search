@@ -74,7 +74,7 @@ def title_str(f) -> str:
 
 async def fetch_results(query: str, folder_title: str, limit: int, days: Optional[int]) -> list[Vacancy]:
     vacancies = []
-    offset_date = datetime.now(timezone.utc) - timedelta(days=days) if days else None
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
     async with TelegramClient(SESSION, API_ID, API_HASH) as client:
         filters = await client(GetDialogFiltersRequest())
@@ -90,7 +90,9 @@ async def fetch_results(query: str, folder_title: str, limit: int, days: Optiona
         for peer in folder.include_peers:
             try:
                 entity = await client.get_entity(peer)
-                async for msg in client.iter_messages(entity, search=query, limit=limit, offset_date=offset_date):
+                async for msg in client.iter_messages(entity, search=query, limit=limit):
+                    if cutoff and msg.date < cutoff:
+                        continue
                     text = msg.text or msg.message or ""
                     if not text:
                         continue
