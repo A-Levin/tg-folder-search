@@ -105,7 +105,7 @@ async def fetch_results(query: str, folder_title: str, limit: int, days: Optiona
                         wp_desc = getattr(wp, "description", None) or ""
                         wp_full = f"{wp_title} {wp_desc}"
                         if not salary and re.search(r"\$\s*\d|€\s*\d|\d+k|\d+\s*usd", wp_full, re.I):
-                            m = re.search(r"[\$€][\d,\s\-–]+(?:k|usd)?|\d+[\s\-–]+\d+\s*(?:usd|\$|€)", wp_full, re.I)
+                            m = re.search(r"[\$€]\s*[\d,]+(?:\s*[-–]\s*[\$€]?\s*[\d,]+)?(?:\s*(?:k|usd))?", wp_full, re.I)
                             if m:
                                 salary = m.group(0).strip()
                         if not location and re.search(r"remote|удален|офис|onsite", wp_full, re.I):
