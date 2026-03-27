@@ -12,9 +12,38 @@ def get_db() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS vacancies (
             link TEXT PRIMARY KEY,
             status TEXT NOT NULL,
-            saved_at TEXT NOT NULL
+            saved_at TEXT NOT NULL,
+            title TEXT,
+            channel TEXT,
+            date TEXT,
+            salary TEXT,
+            location TEXT,
+            stack TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS vacancies_new (
+            link TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            saved_at TEXT NOT NULL,
+            title TEXT,
+            channel TEXT,
+            date TEXT,
+            salary TEXT,
+            location TEXT,
+            stack TEXT
+        )
+    """)
+    # migrate old table if missing columns
+    try:
+        conn.execute("ALTER TABLE vacancies ADD COLUMN title TEXT")
+        conn.execute("ALTER TABLE vacancies ADD COLUMN channel TEXT")
+        conn.execute("ALTER TABLE vacancies ADD COLUMN date TEXT")
+        conn.execute("ALTER TABLE vacancies ADD COLUMN salary TEXT")
+        conn.execute("ALTER TABLE vacancies ADD COLUMN location TEXT")
+        conn.execute("ALTER TABLE vacancies ADD COLUMN stack TEXT")
+    except Exception:
+        pass
     conn.commit()
     return conn
 
@@ -25,12 +54,22 @@ def get_status(link: str) -> str | None:
         return row["status"] if row else None
 
 
-def set_status(link: str, status: str) -> None:
+def set_status(link: str, status: str, vacancy=None) -> None:
     with get_db() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO vacancies (link, status, saved_at) VALUES (?, ?, ?)",
-            (link, status, datetime.now().isoformat()),
-        )
+        if vacancy:
+            conn.execute(
+                """INSERT OR REPLACE INTO vacancies
+                   (link, status, saved_at, title, channel, date, salary, location, stack)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (link, status, datetime.now().isoformat(),
+                 vacancy.title, vacancy.channel, vacancy.date,
+                 vacancy.salary, vacancy.location, vacancy.stack),
+            )
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO vacancies (link, status, saved_at) VALUES (?, ?, ?)",
+                (link, status, datetime.now().isoformat()),
+            )
 
 
 def delete_status(link: str) -> None:
@@ -47,6 +86,6 @@ def get_all_statuses() -> dict[str, str]:
 def get_favorites() -> list[dict]:
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT link, saved_at FROM vacancies WHERE status = 'favorite' ORDER BY saved_at DESC"
+            "SELECT * FROM vacancies WHERE status = 'favorite' ORDER BY saved_at DESC"
         ).fetchall()
         return [dict(row) for row in rows]

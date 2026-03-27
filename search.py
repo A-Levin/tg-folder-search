@@ -252,7 +252,7 @@ class SearchApp(App):
         if not item:
             return
         item.vacancy.status = status
-        database.set_status(item.vacancy.link, status)
+        database.set_status(item.vacancy.link, status, item.vacancy)
         if status == "skipped" and not self.show_skipped:
             item.remove()
             self.title = f"«{self.query_str}» — {len(self.query_one(ListView)._nodes)} результатов"
@@ -265,7 +265,7 @@ class SearchApp(App):
             return
         if item.vacancy.status == "new":
             item.vacancy.status = "seen"
-            database.set_status(item.vacancy.link, "seen")
+            database.set_status(item.vacancy.link, "seen", item.vacancy)
             item.refresh_card()
         self.push_screen(DetailScreen(item.vacancy))
 
@@ -290,7 +290,7 @@ class SearchApp(App):
         item = event.item
         if item.vacancy.status == "new":
             item.vacancy.status = "seen"
-            database.set_status(item.vacancy.link, "seen")
+            database.set_status(item.vacancy.link, "seen", item.vacancy)
             item.refresh_card()
         self.push_screen(DetailScreen(item.vacancy))
 
@@ -303,7 +303,32 @@ def main():
     parser.add_argument("-d", "--days", type=int, help="Только за последние N дней")
     parser.add_argument("--all", dest="show_all", action="store_true", help="Показать скипнутые")
     parser.add_argument("--favorites", action="store_true", help="Показать избранное")
+    parser.add_argument("--export", metavar="FILE", help="Экспорт избранного в markdown файл")
     args = parser.parse_args()
+
+    if args.export:
+        favs = database.get_favorites()
+        if not favs:
+            print("Избранное пусто")
+            return
+        lines = ["# Избранные вакансии\n"]
+        for f in favs:
+            title = f["title"] or "—"
+            lines.append(f"## {title}")
+            lines.append(f"**Канал:** {f['channel'] or '—'}  |  **Дата:** {f['date'] or '—'}")
+            if f["salary"]:
+                lines.append(f"**Зарплата:** {f['salary']}")
+            if f["location"]:
+                lines.append(f"**Локация:** {f['location']}")
+            if f["stack"]:
+                lines.append(f"**Стек:** {f['stack']}")
+            lines.append(f"\n{f['link']}\n")
+            lines.append("---\n")
+        path = os.path.expanduser(args.export)
+        with open(path, "w") as fh:
+            fh.write("\n".join(lines))
+        print(f"Экспортировано {len(favs)} вакансий → {path}")
+        return
 
     if args.favorites:
         favs = database.get_favorites()
@@ -311,7 +336,7 @@ def main():
             print("Избранное пусто")
             return
         for f in favs:
-            print(f"{f['saved_at'][:10]}  {f['link']}")
+            print(f"{f['saved_at'][:10]}  {f['title'] or f['link']}")
         return
 
     if not args.query:
