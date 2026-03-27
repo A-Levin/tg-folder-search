@@ -3,7 +3,7 @@ import asyncio
 import argparse
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -12,7 +12,7 @@ from telethon.tl.functions.messages import GetDialogFiltersRequest
 from telethon.tl.types import DialogFilter
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, ListView, ListItem, Label, Static
+from textual.widgets import Header, Footer, ListView, ListItem, Static
 from textual.binding import Binding
 from textual.screen import Screen
 
@@ -24,9 +24,9 @@ SESSION = os.path.expanduser("~/.tg-folder-search-session")
 
 STATUS_ICON = {
     "favorite": "[yellow]★[/yellow]",
-    "seen": "[dim]✓[/dim]",
-    "skipped": "[dim]✗[/dim]",
-    "new": " ",
+    "seen":     "[dim]✓[/dim]",
+    "skipped":  "[dim]✗[/dim]",
+    "new":      " ",
 }
 
 
@@ -46,7 +46,6 @@ class Vacancy:
 def extract_info(text: str):
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     title = re.sub(r"[\*_`#]+", "", lines[0]).strip() if lines else "—"
-
     salary, location, stack = None, None, None
     for line in lines[1:]:
         cl = line.lower()
@@ -56,7 +55,6 @@ def extract_info(text: str):
             location = re.sub(r"^[^:：]+[:：]\s*", "", line).strip() or line
         if not stack and re.search(r"стек|stack|технолог|требовани|навык|скилл|skill", cl):
             stack = re.sub(r"^[^:：]+[:：]\s*", "", line).strip() or line
-
     return title, salary, location, stack
 
 
@@ -118,17 +116,10 @@ async def fetch_results(query: str, folder_title: str, limit: int, days: Optiona
     return vacancies
 
 
-async def fetch_favorites() -> list[Vacancy]:
-    favs = database.get_favorites()
-    if not favs:
-        return []
-    links = {f["link"] for f in favs}
-    print(f"В избранном {len(links)} вакансий (ссылки сохранены локально).")
-    return []
-
-
 class DetailScreen(Screen):
-    BINDINGS = [Binding("escape,q", "app.pop_screen", "Назад")]
+    BINDINGS = [
+        Binding("escape,q", "app.pop_screen", "Назад"),
+    ]
 
     def __init__(self, vacancy: Vacancy):
         super().__init__()
@@ -147,7 +138,10 @@ class DetailScreen(Screen):
             + f"\n{'─' * 60}\n\n{v.full_text}"
         )
         yield Static(text, classes="detail")
-        yield Footer()
+        yield Static(
+            " [dim]q/Esc[/dim] назад",
+            classes="hint",
+        )
 
 
 class VacancyItem(ListItem):
@@ -155,10 +149,7 @@ class VacancyItem(ListItem):
         super().__init__()
         self.vacancy = vacancy
 
-    def compose(self) -> ComposeResult:
-        yield Label(self._render())
-
-    def _render(self) -> str:
+    def _build_text(self) -> str:
         v = self.vacancy
         icon = STATUS_ICON.get(v.status, " ")
         parts = [f"{icon} [bold]{v.title}[/bold]  [dim]{v.channel} · {v.date}[/dim]"]
@@ -174,8 +165,11 @@ class VacancyItem(ListItem):
             parts.append(f"[dim]{v.link}[/dim]")
         return "\n".join(parts)
 
-    def refresh_label(self):
-        self.query_one(Label).update(self._render())
+    def compose(self) -> ComposeResult:
+        yield Static(self._build_text(), classes="card")
+
+    def refresh_card(self):
+        self.query_one(".card", Static).update(self._build_text())
 
 
 class SearchApp(App):
@@ -190,15 +184,26 @@ class SearchApp(App):
     .detail {
         padding: 1 2;
         overflow-y: auto;
+        height: 1fr;
+    }
+    .hint {
+        height: 1;
+        padding: 0 1;
+        background: $panel;
+        color: $text-muted;
     }
     """
     BINDINGS = [
-        Binding("q", "quit", "Выход"),
-        Binding("enter", "open_detail", "Открыть"),
-        Binding("m", "mark_seen", "Прочитано"),
-        Binding("f", "mark_favorite", "Избранное"),
-        Binding("s", "mark_skip", "Скип"),
-        Binding("u", "unmark", "Сбросить"),
+        Binding("j", "cursor_down", "↓", show=True),
+        Binding("k", "cursor_up", "↑", show=True),
+        Binding("g", "cursor_top", "Начало", show=False),
+        Binding("G", "cursor_bottom", "Конец", show=False),
+        Binding("enter", "open_detail", "Открыть", show=True),
+        Binding("m", "mark_seen", "Прочитано", show=True),
+        Binding("f", "mark_favorite", "★ Избр.", show=True),
+        Binding("s", "mark_skip", "Скип", show=True),
+        Binding("u", "unmark", "Сбросить", show=True),
+        Binding("q", "quit", "Выход", show=True),
     ]
 
     def __init__(self, vacancies: list[Vacancy], query: str, show_skipped: bool = False):
@@ -215,14 +220,30 @@ class SearchApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield ListView(*[VacancyItem(v) for v in self._visible()])
-        yield Footer()
 
     def on_mount(self):
-        self.title = f"Поиск: «{self.query_str}» — {len(self._visible())} результатов"
+        self.title = f"«{self.query_str}» — {len(self._visible())} результатов"
+        self.sub_title = "j/k навигация · Enter открыть · f★ m✓ s✗ u сброс · q выход"
 
     def _current_item(self) -> Optional[VacancyItem]:
         lv = self.query_one(ListView)
-        return lv.highlighted_child if lv.highlighted_child else None
+        return lv.highlighted_child
+
+    def action_cursor_down(self):
+        self.query_one(ListView).action_cursor_down()
+
+    def action_cursor_up(self):
+        self.query_one(ListView).action_cursor_up()
+
+    def action_cursor_top(self):
+        lv = self.query_one(ListView)
+        if lv._nodes:
+            lv.index = 0
+
+    def action_cursor_bottom(self):
+        lv = self.query_one(ListView)
+        if lv._nodes:
+            lv.index = len(lv._nodes) - 1
 
     def _set_status(self, status: str):
         item = self._current_item()
@@ -231,20 +252,20 @@ class SearchApp(App):
         item.vacancy.status = status
         database.set_status(item.vacancy.link, status)
         if status == "skipped" and not self.show_skipped:
-            lv = self.query_one(ListView)
-            lv.remove_children(f"#{item.id}")
-            self.title = f"Поиск: «{self.query_str}» — {len(self._visible())} результатов"
+            item.remove()
+            self.title = f"«{self.query_str}» — {len(self.query_one(ListView)._nodes)} результатов"
         else:
-            item.refresh_label()
+            item.refresh_card()
 
     def action_open_detail(self):
         item = self._current_item()
-        if item:
-            if item.vacancy.status == "new":
-                item.vacancy.status = "seen"
-                database.set_status(item.vacancy.link, "seen")
-                item.refresh_label()
-            self.push_screen(DetailScreen(item.vacancy))
+        if not item:
+            return
+        if item.vacancy.status == "new":
+            item.vacancy.status = "seen"
+            database.set_status(item.vacancy.link, "seen")
+            item.refresh_card()
+        self.push_screen(DetailScreen(item.vacancy))
 
     def action_mark_seen(self):
         self._set_status("seen")
@@ -261,14 +282,14 @@ class SearchApp(App):
             return
         item.vacancy.status = "new"
         database.delete_status(item.vacancy.link)
-        item.refresh_label()
+        item.refresh_card()
 
     def on_list_view_selected(self, event: ListView.Selected):
         item = event.item
         if item.vacancy.status == "new":
             item.vacancy.status = "seen"
             database.set_status(item.vacancy.link, "seen")
-            item.refresh_label()
+            item.refresh_card()
         self.push_screen(DetailScreen(item.vacancy))
 
 
