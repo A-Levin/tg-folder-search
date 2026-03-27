@@ -44,18 +44,38 @@ class Vacancy:
     status: str = "new"
 
 
+def clean_markdown(s: str) -> str:
+    s = re.sub(r"\(https?://[^\)]+\)", "", s)   # убрать (url)
+    s = re.sub(r"https?://\S+", "", s)           # убрать голые ссылки
+    s = re.sub(r"[\[\]\*_`#@]+", "", s)          # убрать markdown символы
+    s = re.sub(r"[ \t]{2,}", " ", s)             # сжать пробелы (не трогать переносы)
+    return s.strip()
+
+
 def extract_info(text: str):
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    title = re.sub(r"[\*_`#]+", "", lines[0]).strip() if lines else "—"
+    cleaned = clean_markdown(text)
+    lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
+    title = lines[0] if lines else "—"
     salary, location, stack = None, None, None
     for line in lines[1:]:
         cl = line.lower()
-        if not salary and re.search(r"зарплат|зп\b|вилка|salary|\$\s*\d|€\s*\d|от \d", cl):
+        if not salary and re.search(r"зарплат|зп\b|вилка|salary|\$\s*\d|€\s*\d|от \d|\d[\d\s]+[-–—]\s*\d[\d\s]+\s*\$", cl):
             salary = re.sub(r"^[^:：]+[:：]\s*", "", line).strip() or line
         if not location and re.search(r"локаци|location|формат|город|офис|remote|удален", cl):
-            location = re.sub(r"^[^:：]+[:：]\s*", "", line).strip() or line
+            val = re.sub(r"^[^:：]+[:：]\s*", "", line).strip()
+            if val != line or re.search(r"город|локаци|формат|офис", cl):
+                location = val or line
         if not stack and re.search(r"стек|stack|технолог|требовани|навык|скилл|skill", cl):
             stack = re.sub(r"^[^:：]+[:：]\s*", "", line).strip() or line
+    # Найти зарплату в свободном формате (4 000 — 7 000 $/мес)
+    if not salary:
+        m = re.search(
+            r"[\$€₽]\s*[\d\s,]+(?:\s*[-–—]\s*[\$€₽]?\s*[\d\s,]+)?(?:\s*(?:k|usd|мес|руб|т\.р))?|"
+            r"[\d\s]{3,}[-–—]\s*[\d\s]{3,}\s*(?:\$|€|₽|usd|руб|т\.р)",
+            cleaned, re.I
+        )
+        if m:
+            salary = re.sub(r"\s+", " ", m.group(0)).strip()
     return title, salary, location, stack
 
 
