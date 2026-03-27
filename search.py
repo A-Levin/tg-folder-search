@@ -315,7 +315,15 @@ class SearchApp(App):
         self._set_status("seen")
 
     def action_mark_favorite(self):
-        self._set_status("favorite")
+        item = self._current_item()
+        if not item:
+            return
+        if item.vacancy.status == "favorite":
+            item.vacancy.status = "seen"
+            database.set_status(item.vacancy.link, "seen", item.vacancy)
+            item.refresh_card()
+        else:
+            self._set_status("favorite")
 
     def action_mark_skip(self):
         self._set_status("skipped")
